@@ -1,4 +1,3 @@
-import Navbar from "../components/navbar";
 import { useEffect, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -56,7 +55,6 @@ const DashBoard = () => {
 
   return (
     <main className="bg-transparent">
-      <Navbar placeholder="Search place" map={mapInstance} />
       <Map onMapReady={setMapInstance} />
     </main>
   );
