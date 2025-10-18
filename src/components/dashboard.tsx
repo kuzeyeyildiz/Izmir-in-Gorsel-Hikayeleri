@@ -12,8 +12,8 @@ const Map = ({ onMapReady }: { onMapReady: (map: maplibregl.Map) => void }) => {
       container: mapContainer.current,
       style:
         "https://api.maptiler.com/maps/openstreetmap/style.json?key=jhCcpBmLi8AmPxpV9Clp",
-      center: [27.1384, 38.4192], // İzmir city center (Konak district)
-      zoom: 12,
+      center: [27.138, 38.4192], // İzmir city center (Konak district)
+      zoom: 11.5,
       maxBounds: [
         [26.9, 38.3], // Southwest limit
         [27.4, 38.6], // Northeast limit
@@ -39,7 +39,7 @@ const Map = ({ onMapReady }: { onMapReady: (map: maplibregl.Map) => void }) => {
     return () => {
       map.remove();
     };
-  }, []);
+  }, [onMapReady]);
 
   return (
     <div
@@ -52,6 +52,20 @@ const Map = ({ onMapReady }: { onMapReady: (map: maplibregl.Map) => void }) => {
 
 const DashBoard = () => {
   const [mapInstance, setMapInstance] = useState<maplibregl.Map | null>(null);
+
+  useEffect(() => {
+    if (!mapInstance) return;
+
+    const marker = new maplibregl.Marker({ color: "#007bff" })
+      .setLngLat([27.138, 38.4192])
+      .setPopup(new maplibregl.Popup().setText("İzmir City Center"))
+      .addTo(mapInstance);
+
+    // ✅ Cleanup correctly returns a function
+    return () => {
+      marker.remove();
+    };
+  }, [mapInstance]);
 
   return (
     <main className="bg-transparent">
