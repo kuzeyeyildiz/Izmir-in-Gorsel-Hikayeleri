@@ -15,7 +15,7 @@ const Map = ({ onMapReady }) => {
       center: [27.138, 38.4192], // İzmir city center
       zoom: 11.5,
       maxBounds: [
-        [25.9, 37.8], // Southwest limit
+        [25.9, 37.6], // Southwest limit
         [28.4, 39.2], // Northeast limit
       ],
     });
