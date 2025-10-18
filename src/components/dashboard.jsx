@@ -11,7 +11,7 @@ const Map = ({ onMapReady }) => {
     const map = new maplibregl.Map({
       container: mapContainer.current,
       style:
-        "https://api.maptiler.com/maps/openstreetmap/style.json?key=jhCcpBmLi8AmPxpV9Clp",
+        "https://api.maptiler.com/maps/streets-v4/style.json?key=jhCcpBmLi8AmPxpV9Clp",
       center: [27.138, 38.4192], // İzmir city center
       zoom: 11.5,
       maxBounds: [
