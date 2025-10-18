@@ -1,4 +1,4 @@
-const SearchForm = ({ inputTo }: { inputTo: string }) => {
+const SearchForm = ({ inputTo }) => {
   return (
     <div className="mt-2 relative">
       <input

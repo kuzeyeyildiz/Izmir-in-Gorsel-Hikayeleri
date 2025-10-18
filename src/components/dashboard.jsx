@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 
-const Map = ({ onMapReady }: { onMapReady: (map: maplibregl.Map) => void }) => {
-  const mapContainer = useRef<HTMLDivElement | null>(null);
+const Map = ({ onMapReady }) => {
+  const mapContainer = (useRef < HTMLDivElement) | (null > null);
 
   useEffect(() => {
     if (!mapContainer.current) return;
@@ -49,7 +49,8 @@ const Map = ({ onMapReady }: { onMapReady: (map: maplibregl.Map) => void }) => {
 };
 
 const DashBoard = () => {
-  const [mapInstance, setMapInstance] = useState<maplibregl.Map | null>(null);
+  const [mapInstance, setMapInstance] =
+    (useState < maplibregl.Map) | (null > null);
 
   // 👇 Make sure this useEffect is INSIDE DashBoard
   useEffect(() => {
