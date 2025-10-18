@@ -12,7 +12,7 @@ const Map = ({ onMapReady }: { onMapReady: (map: maplibregl.Map) => void }) => {
       container: mapContainer.current,
       style:
         "https://api.maptiler.com/maps/openstreetmap/style.json?key=jhCcpBmLi8AmPxpV9Clp",
-      center: [27.138, 38.4192], // İzmir city center (Konak district)
+      center: [27.138, 38.4192], // İzmir city center
       zoom: 11.5,
       maxBounds: [
         [26.9, 38.3], // Southwest limit
@@ -20,13 +20,11 @@ const Map = ({ onMapReady }: { onMapReady: (map: maplibregl.Map) => void }) => {
       ],
     });
 
-    // Hide POI layers after style loads
     map.on("style.load", () => {
       const style = map.getStyle();
       const layers = style?.layers;
 
       if (!layers) return;
-
       layers.forEach((layer) => {
         if (layer.id.toLowerCase().includes("poi") || layer.type === "symbol") {
           map.setLayoutProperty(layer.id, "visibility", "none");
@@ -53,18 +51,27 @@ const Map = ({ onMapReady }: { onMapReady: (map: maplibregl.Map) => void }) => {
 const DashBoard = () => {
   const [mapInstance, setMapInstance] = useState<maplibregl.Map | null>(null);
 
+  // 👇 Make sure this useEffect is INSIDE DashBoard
   useEffect(() => {
     if (!mapInstance) return;
 
-    const marker = new maplibregl.Marker({ color: "#007bff" })
+    // Create custom marker element
+    const el = document.createElement("div");
+    el.style.width = "20px";
+    el.style.height = "20px";
+    el.style.backgroundColor = "#007bff";
+    el.style.borderRadius = "50%";
+    el.style.border = "2px solid white";
+    el.style.boxShadow = "0 0 6px rgba(0,0,0,0.3)";
+    el.style.cursor = "pointer";
+
+    // Add marker
+    const marker = new maplibregl.Marker({ element: el })
       .setLngLat([27.138, 38.4192])
       .setPopup(new maplibregl.Popup().setText("İzmir City Center"))
       .addTo(mapInstance);
 
-    // ✅ Cleanup correctly returns a function
-    return () => {
-      marker.remove();
-    };
+    return () => marker.remove();
   }, [mapInstance]);
 
   return (
