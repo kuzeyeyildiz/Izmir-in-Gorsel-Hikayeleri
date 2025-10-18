@@ -13,7 +13,7 @@ import { FaBell } from "react-icons/fa";
 import { CiLogin } from "react-icons/ci";
 import maplibregl from "maplibre-gl";
 import SearchForm from "./SearchForm";
-import polyline from "@mapbox/polyline";
+const polyline: any = require("@mapbox/polyline");
 
 // --- Utility: debounce ---
 function debounce<T extends (...args: any[]) => void>(func: T, delay: number) {
