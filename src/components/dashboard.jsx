@@ -3,7 +3,7 @@ import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 
 const Map = ({ onMapReady }) => {
-  const mapContainer = (useRef < HTMLDivElement) | (null > null);
+  const mapContainer = useRef(null);
 
   useEffect(() => {
     if (!mapContainer.current) return;
@@ -34,9 +34,7 @@ const Map = ({ onMapReady }) => {
 
     onMapReady(map);
 
-    return () => {
-      map.remove();
-    };
+    return () => map.remove();
   }, [onMapReady]);
 
   return (
@@ -49,10 +47,8 @@ const Map = ({ onMapReady }) => {
 };
 
 const DashBoard = () => {
-  const [mapInstance, setMapInstance] =
-    (useState < maplibregl.Map) | (null > null);
+  const [mapInstance, setMapInstance] = useState(null);
 
-  // 👇 Make sure this useEffect is INSIDE DashBoard
   useEffect(() => {
     if (!mapInstance) return;
 
