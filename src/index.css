@@ -1,0 +1,99 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer components {
+  .sidebar-icon {
+    @apply relative flex items-center justify-center
+                h-12 w-12 mt-2 mb-2 mx-auto shadow-lg 
+                bg-gray-800 text-green-500
+                hover:bg-green-600 hover:text-white
+                 rounded-3xl hover:rounded-xl
+                transition-all duration-200 ease-in
+                cursor-pointer;
+  }
+  .sidebar-tooltip {
+    @apply absolute w-auto p-2 m-2 min-w-max left-14
+               rounded-md shadow-md
+               text-white bg-gray-900
+               text-xs font-bold
+               transition-all duration-100 scale-0
+               origin-left;
+  }
+  .text-input {
+    @apply flex items-center justify-center
+                text-justify
+                px-2 py-2
+                h-14 w-64 mx-auto shadow-xl
+                placeholder-gray-500
+                text-white bg-gray-600
+                border-gray-600 border-2
+                focus:outline-none focus:border-blue-500
+                text-lg rounded-xl
+                transition-all duration-200 ease-in;
+  }
+  .button {
+    @apply flex flex-col items-center justify-center
+                w-64 max-w-sm
+                px-4 py-2
+                bg-blue-600 text-white
+                rounded-lg hover:rounded-xl 
+                shadow-md
+                hover:border-blue-300
+                cursor-pointer
+                transition-all duration-100 ease-in;
+  }
+  .icon {
+    @apply absolute flex-row items-center justify-center
+                w-auto h-auto max-w-xs
+                px-2 py-2 translate-y-8
+               bg-gray-600 hover:bg-gray-400 rounded-3xl
+                cursor-pointer text-gray-300
+                transition-all duration-200 ease-in
+                mb-2;
+  }
+  .navbar {
+    @apply sm:mr-5 px-6 py-2 rounded-3xl border
+           border-gray-300 focus:outline-none
+           bg-opacity-50 w-full z-30;
+  }
+  .searchbar {
+    @apply absolute items-center justify-end 
+           px-4 py-2 rounded-3xl text-gray-400
+           focus:outline-none bg-white hover:bg-blue-600
+          hover:text-white border-r border-r-gray-300
+           cursor-pointer transition-all duration-300
+           ease-in right-1 top-0 translate-x-0
+           flex-shrink;
+  }
+  .hamMenu {
+    @apply flex flex-row items-center
+            rounded-3xl bg-white 
+            z-50
+            text-gray-400 flex-shrink
+            px-2 py-2 focus:outline-none border 
+            border-gray-300 hover:bg-blue-600
+            hover:text-white top-4 translate-x-0
+            transition-all duration-200 ease-in;
+  }
+  .hamMenuIcon {
+    @apply relative flex items-center justify-start
+                w-full mt-2 mb-2 mx-auto shadow-lg 
+                px-4 py-4
+                bg-white text-gray-400
+                hover:bg-blue-600 hover:text-white
+                rounded-l-3xl
+                transition-all duration-200 ease-in
+                cursor-pointer;
+  }
+  .btn {
+    @apply rounded-3xl shadow-md hover:text-white
+           hover:bg-blue-600 w-full items-start justify-start
+           focus:outline-none px-2 py-2;
+  }
+  .searchForm {
+    @apply sm:mr-5 px-6 py-2 rounded-md border
+           border-gray-300 focus:outline-none
+           bg-opacity-50 w-full z-30 focus:rounded-md;
+  }
+}
