@@ -72,11 +72,9 @@ const DashBoard = () => {
   useEffect(() => {
     if (!mapInstance) return;
 
-    // --- changed: use PDF first-page as marker icon and embed full PDF in popup ---
+    const pdfPath = "/assets/gezginler.pdf"; // public/assets/gezginler.pdf
 
-    const pdfPath = "/assets/gezginler.pdf"; // put your PDF here (public/assets/gezginler.pdf)
-
-    // create placeholder element while PDF renders
+    // create placeholder image element
     const izmirImg = document.createElement("img");
     izmirImg.style.width = "48px";
     izmirImg.style.height = "48px";
@@ -84,29 +82,54 @@ const DashBoard = () => {
     izmirImg.style.borderRadius = "6px";
     izmirImg.style.boxShadow = "0 1px 4px rgba(0,0,0,0.3)";
     izmirImg.style.cursor = "pointer";
-    // small default icon while loading
     izmirImg.src =
       "data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48'%3E%3Crect width='48' height='48' rx='6' fill='%23007bff'/%3E%3C/svg%3E";
 
-    let izmirMarker;
-    renderPdfPageToDataUrl(pdfPath, 1, 1.0)
-      .then((dataUrl) => {
-        izmirImg.src = dataUrl;
-        // popup: embed the full PDF inside an iframe
+    let izmirMarker = null;
+    let pdfBlobUrl = null;
+    let popup = null;
+
+    // render first page (for icon) + fetch blob (for iframe) in parallel
+    Promise.all([
+      renderPdfPageToDataUrl(pdfPath, 1, 1.0).catch(() => null),
+      fetch(pdfPath)
+        .then((res) => {
+          if (!res.ok) throw new Error("fetch failed");
+          return res.blob();
+        })
+        .then((b) => {
+          pdfBlobUrl = URL.createObjectURL(b);
+          return pdfBlobUrl;
+        })
+        .catch(() => null),
+    ])
+      .then(([dataUrl, blobUrl]) => {
+        if (dataUrl) izmirImg.src = dataUrl;
+
         const iframe = document.createElement("iframe");
-        iframe.src = pdfPath + "#toolbar=0&view=fitH";
+        // prefer blob URL to avoid embedding/cors issues
+        iframe.src = (blobUrl || pdfPath) + "#toolbar=0&view=fitH";
         iframe.style.width = "360px";
         iframe.style.height = "480px";
         iframe.style.border = "none";
 
+        // ensure popup can be large enough
+        popup = new maplibregl.Popup({ maxWidth: "380px" }).setDOMContent(iframe);
+
         izmirMarker = new maplibregl.Marker({ element: izmirImg })
           .setLngLat([27.138, 38.4192])
-          .setPopup(new maplibregl.Popup().setDOMContent(iframe))
+          .setPopup(popup)
           .addTo(mapInstance);
+
+        // extra: ensure click definitely opens the popup
+        izmirMarker.getElement().addEventListener("click", (e) => {
+          // avoid default propagation issues
+          e.stopPropagation();
+          popup.addTo(mapInstance).setLngLat([27.138, 38.4192]);
+        });
       })
       .catch((err) => {
-        console.error("PDF render failed:", err);
-        // fallback to simple colored marker
+        console.error("PDF handling failed:", err);
         const fallback = document.createElement("div");
         fallback.style.width = "20px";
         fallback.style.height = "20px";
@@ -118,25 +141,27 @@ const DashBoard = () => {
           .addTo(mapInstance);
       });
 
-    // existing Narlıdere marker (unchanged)
+    // narlıdere marker (unchanged)
     const narlidereEl = document.createElement("div");
     narlidereEl.style.width = "20px";
     narlidereEl.style.height = "20px";
-    narlidereEl.style.backgroundColor = "#28a745"; // green color for distinction
+    narlidereEl.style.backgroundColor = "#28a745";
     narlidereEl.style.borderRadius = "50%";
     narlidereEl.style.border = "2px solid white";
     narlidereEl.style.boxShadow = "0 0 6px rgba(0,0,0,0.3)";
     narlidereEl.style.cursor = "pointer";
 
     const narlidereMarker = new maplibregl.Marker({ element: narlidereEl })
-      .setLngLat([27.0, 38.4]) // approximate coordinates for Narlıdere
+      .setLngLat([27.0, 38.4])
       .setPopup(new maplibregl.Popup().setText("narlıdere"))
       .addTo(mapInstance);
 
     // Cleanup
     return () => {
       if (izmirMarker) izmirMarker.remove();
-      narlidereMarker.remove();
+      if (narlidereMarker) narlidereMarker.remove();
+      if (popup) popup.remove();
+      if (pdfBlobUrl) URL.revokeObjectURL(pdfBlobUrl);
     };
   }, [mapInstance]);
 
