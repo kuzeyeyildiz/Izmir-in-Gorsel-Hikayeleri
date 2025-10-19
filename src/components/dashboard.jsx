@@ -2,7 +2,42 @@ import { useEffect, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 
-// no pdfjs-dist here — we fetch the PDF as a blob and embed in an iframe popup
+// pdfjs (Vite-friendly)
+import { getDocument, GlobalWorkerOptions } from "pdfjs-dist/legacy/build/pdf";
+GlobalWorkerOptions.workerSrc = new URL(
+  "pdfjs-dist/build/pdf.worker.min.js",
+  import.meta.url
+).toString();
+
+// helper: render first page -> dataURL (accepts Blob, blob: URL or normal URL)
+async function renderPdfPageToDataUrl(src, pageNumber = 1, scale = 1.0) {
+  // Normalize source: if blob: URL fetch ArrayBuffer, if Blob use arrayBuffer, else pass URL string
+  let loadingTask;
+  if (src instanceof Blob) {
+    const arr = await src.arrayBuffer();
+    loadingTask = getDocument({ data: arr });
+  } else if (typeof src === "string" && src.startsWith("blob:")) {
+    const res = await fetch(src);
+    if (!res.ok) throw new Error("Failed to fetch blob URL for preview");
+    const arr = await res.arrayBuffer();
+    loadingTask = getDocument({ data: arr });
+  } else if (typeof src === "string") {
+    loadingTask = getDocument(src);
+  } else {
+    // fallback: try passing through (could be {data:...} already)
+    loadingTask = getDocument(src);
+  }
+
+  const pdf = await loadingTask.promise;
+  const page = await pdf.getPage(pageNumber);
+  const viewport = page.getViewport({ scale });
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(viewport.width);
+  canvas.height = Math.round(viewport.height);
+  const ctx = canvas.getContext("2d");
+  await page.render({ canvasContext: ctx, viewport }).promise;
+  return canvas.toDataURL("image/png");
+}
 
 const Map = ({ onMapReady }) => {
   const mapContainer = useRef(null);
@@ -22,7 +57,7 @@ const Map = ({ onMapReady }) => {
       ],
     });
 
-    // custom zoom control with - and + buttons
+    // custom zoom control (keeps previous)
     class SimpleZoomControl {
       onAdd(mapInstance) {
         this._map = mapInstance;
@@ -37,7 +72,6 @@ const Map = ({ onMapReady }) => {
           overflow: "hidden",
           margin: "8px",
         });
-
         const btnStyle = {
           width: "36px",
           height: "36px",
@@ -49,7 +83,6 @@ const Map = ({ onMapReady }) => {
           textAlign: "center",
           padding: "0",
         };
-
         const zoomIn = document.createElement("button");
         zoomIn.innerText = "+";
         Object.assign(zoomIn.style, btnStyle);
@@ -58,7 +91,6 @@ const Map = ({ onMapReady }) => {
           e.stopPropagation();
           this._map.zoomTo(this._map.getZoom() + 1, { duration: 300 });
         });
-
         const zoomOut = document.createElement("button");
         zoomOut.innerText = "−";
         Object.assign(zoomOut.style, btnStyle);
@@ -67,13 +99,10 @@ const Map = ({ onMapReady }) => {
           e.stopPropagation();
           this._map.zoomTo(this._map.getZoom() - 1, { duration: 300 });
         });
-
         this._container.appendChild(zoomIn);
         this._container.appendChild(zoomOut);
-
         return this._container;
       }
-
       onRemove() {
         if (this._container && this._container.parentNode) {
           this._container.parentNode.removeChild(this._container);
@@ -81,8 +110,6 @@ const Map = ({ onMapReady }) => {
         this._map = undefined;
       }
     }
-
-    // add the custom control to bottom-left
     map.addControl(new SimpleZoomControl(), "bottom-left");
 
     map.on("style.load", () => {
@@ -117,7 +144,7 @@ const DashBoard = () => {
 
     const pdfPath = "/assets/gezginler.pdf"; // public/assets/gezginler.pdf
 
-    // create marker element (small blue/red circle)
+    // small marker creator
     const createMarker = (color = "#007bff") => {
       const wrapper = document.createElement("div");
       wrapper.style.position = "relative";
@@ -152,20 +179,27 @@ const DashBoard = () => {
     let isOpenIzmir = false;
     let isOpenNarlidere = false;
 
-    // create popup DOM that contains iframe + like button inside popup
-    const createPopupContentWithLike = (blobUrl, initialLikes = 0) => {
+    // create popup content: will render thumbnail image inside popup and include like button
+    const createPopupContentWithPreview = (blobUrl, initialLikes = 0) => {
       const container = document.createElement("div");
       container.style.position = "relative";
       container.style.width = "360px";
       container.style.height = "480px";
       container.style.boxSizing = "border-box";
+      container.style.background = "#fff";
 
-      const iframe = document.createElement("iframe");
-      iframe.src = blobUrl + "#toolbar=0&view=fitH";
-      iframe.style.width = "100%";
-      iframe.style.height = "100%";
-      iframe.style.border = "none";
-      iframe.style.display = "block";
+      const img = document.createElement("img");
+      img.alt = "PDF preview";
+      img.style.width = "100%";
+      img.style.height = "100%";
+      img.style.objectFit = "contain";
+      img.style.display = "block";
+      // loading placeholder
+      img.src =
+        "data:image/svg+xml;charset=UTF-8," +
+        encodeURIComponent(
+          `<svg xmlns='http://www.w3.org/2000/svg' width='360' height='480'><rect width='100%' height='100%' fill='#f3f4f6'/><text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle' fill='#9ca3af' font-size='16'>Loading preview…</text></svg>`
+        );
 
       // like button inside popup at bottom-right
       const likeBtn = document.createElement("button");
@@ -208,13 +242,12 @@ const DashBoard = () => {
 
       likeBtn.appendChild(heart);
       likeBtn.appendChild(badge);
-      container.appendChild(iframe);
+      container.appendChild(img);
       container.appendChild(likeBtn);
 
       // like state
       let liked = false;
       let likes = initialLikes;
-
       likeBtn.addEventListener("click", (e) => {
         e.stopPropagation();
         e.preventDefault();
@@ -230,9 +263,25 @@ const DashBoard = () => {
         badge.style.display = likes > 0 ? "flex" : "none";
       });
 
+      // render preview async
+      renderPdfPageToDataUrl(blobUrl, 1, 1.2)
+        .then((dataUrl) => {
+          img.src = dataUrl;
+        })
+        .catch((err) => {
+          console.error("Preview render failed:", err);
+          // keep placeholder or show fallback text image
+          img.src =
+            "data:image/svg+xml;charset=UTF-8," +
+            encodeURIComponent(
+              `<svg xmlns='http://www.w3.org/2000/svg' width='360' height='480'><rect width='100%' height='100%' fill='#fee2e2'/><text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle' fill='#b91c1c' font-size='14'>Preview failed</text></svg>`
+            );
+        });
+
       return container;
     };
 
+    // fetch blob once and create popups with preview
     fetch(pdfPath)
       .then((res) => {
         if (!res.ok) throw new Error("PDF fetch failed: " + res.status);
@@ -241,12 +290,11 @@ const DashBoard = () => {
       .then((blob) => {
         pdfBlobUrl = URL.createObjectURL(blob);
 
-        // popups containing iframe + like button
         popupIzmir = new maplibregl.Popup({ maxWidth: "380px", autoPan: false }).setDOMContent(
-          createPopupContentWithLike(pdfBlobUrl, 0)
+          createPopupContentWithPreview(pdfBlobUrl, 0)
         );
         popupNarlidere = new maplibregl.Popup({ maxWidth: "380px", autoPan: false }).setDOMContent(
-          createPopupContentWithLike(pdfBlobUrl, 0)
+          createPopupContentWithPreview(pdfBlobUrl, 0)
         );
 
         izmirMarker = new maplibregl.Marker({ element: izmir.wrapper, anchor: "center" })
@@ -267,12 +315,10 @@ const DashBoard = () => {
 
         const openPopup = (opts) => {
           const { circle, popup, coords, otherPopup, otherCircleRefSetter } = opts;
-          // close other
           if (otherPopup) {
             otherPopup.remove();
             if (otherCircleRefSetter) otherCircleRefSetter();
           }
-
           circle.style.width = "40px";
           circle.style.height = "40px";
           circle.style.borderRadius = "6px";
@@ -299,7 +345,6 @@ const DashBoard = () => {
           }
         };
 
-        // Izmir click handler
         izmir.wrapper.addEventListener("click", (e) => {
           e.stopPropagation();
           if (isOpenIzmir) {
@@ -308,7 +353,6 @@ const DashBoard = () => {
             isOpenIzmir = false;
             return;
           }
-          // close other if open
           if (isOpenNarlidere && popupNarlidere) {
             popupNarlidere.remove();
             revert(narlidere.circle);
@@ -324,7 +368,6 @@ const DashBoard = () => {
           isOpenIzmir = true;
         });
 
-        // Narlidere click handler
         narlidere.wrapper.addEventListener("click", (e) => {
           e.stopPropagation();
           if (isOpenNarlidere) {
@@ -368,7 +411,6 @@ const DashBoard = () => {
           .setPopup(fallbackPopupNarlidere)
           .addTo(mapInstance);
 
-        // simple toggle behavior for fallback
         izmir.wrapper.addEventListener("click", (e) => {
           e.stopPropagation();
           izmir.circle.style.width = "40px";
