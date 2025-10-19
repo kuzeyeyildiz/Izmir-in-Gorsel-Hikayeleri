@@ -1,9 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
+import { getDocument, GlobalWorkerOptions } from "pdfjs-dist/legacy/build/pdf";
+GlobalWorkerOptions.workerSrc = new URL(
+  "pdfjs-dist/build/pdf.worker.min.js",
+  import.meta.url
+).toString();
 
 // inject aesthetic marker CSS once
-if (typeof document !== "undefined" && !document.getElementById("custom-marker-styles")) {
+if (
+  typeof document !== "undefined" &&
+  !document.getElementById("custom-marker-styles")
+) {
   const style = document.createElement("style");
   style.id = "custom-marker-styles";
   style.textContent = `
@@ -69,11 +77,6 @@ if (typeof document !== "undefined" && !document.getElementById("custom-marker-s
 }
 
 // pdfjs (Vite-friendly)
-import { getDocument, GlobalWorkerOptions } from "pdfjs-dist/legacy/build/pdf";
-GlobalWorkerOptions.workerSrc = new URL(
-  "pdfjs-dist/build/pdf.worker.min.js",
-  import.meta.url
-).toString();
 
 // helper: render first page -> dataURL (accepts Blob, blob: URL or normal URL)
 async function renderPdfPageToDataUrl(src, pageNumber = 1, scale = 1.0) {
@@ -236,7 +239,11 @@ const DashBoard = () => {
       const circle = document.createElement("div");
       circle.className = "custom-marker";
       // apply red class for red color input to keep consistent gradient
-      if (color === "#ff3b30" || color.toLowerCase().includes("ff3b30") || color.toLowerCase().includes("red")) {
+      if (
+        color === "#ff3b30" ||
+        color.toLowerCase().includes("ff3b30") ||
+        color.toLowerCase().includes("red")
+      ) {
         circle.classList.add("red");
       } else {
         // allow custom color by setting inline gradient fallback
@@ -383,23 +390,31 @@ const DashBoard = () => {
         pdfBlobUrl = URL.createObjectURL(blob);
         pdfBlobUrlRef.current = pdfBlobUrl;
 
-        popupIzmir = new maplibregl.Popup({ maxWidth: "380px", autoPan: false }).setDOMContent(
-          createPopupContentWithPreview(pdfBlobUrl, 0)
-        );
-        popupNarlidere = new maplibregl.Popup({ maxWidth: "380px", autoPan: false }).setDOMContent(
-          createPopupContentWithPreview(pdfBlobUrl, 0)
-        );
+        popupIzmir = new maplibregl.Popup({
+          maxWidth: "380px",
+          autoPan: false,
+        }).setDOMContent(createPopupContentWithPreview(pdfBlobUrl, 0));
+        popupNarlidere = new maplibregl.Popup({
+          maxWidth: "380px",
+          autoPan: false,
+        }).setDOMContent(createPopupContentWithPreview(pdfBlobUrl, 0));
 
         // store popup refs for external effect
         popupIzmirRef.current = popupIzmir;
         popupNarlidereRef.current = popupNarlidere;
 
-        izmirMarker = new maplibregl.Marker({ element: izmir.wrapper, anchor: "center" })
+        izmirMarker = new maplibregl.Marker({
+          element: izmir.wrapper,
+          anchor: "center",
+        })
           .setLngLat([27.138, 38.4192])
           .setPopup(popupIzmir)
           .addTo(mapInstance);
 
-        narlidereMarker = new maplibregl.Marker({ element: narlidere.wrapper, anchor: "center" })
+        narlidereMarker = new maplibregl.Marker({
+          element: narlidere.wrapper,
+          anchor: "center",
+        })
           .setLngLat([27.0, 38.4])
           .setPopup(popupNarlidere)
           .addTo(mapInstance);
@@ -434,12 +449,12 @@ const DashBoard = () => {
       .catch((err) => {
         console.error("Failed to load PDF for marker popups:", err);
 
-        const fallbackPopupIzmir = new maplibregl.Popup({ autoPan: false }).setText(
-          "İzmir City Center"
-        );
-        const fallbackPopupNarlidere = new maplibregl.Popup({ autoPan: false }).setText(
-          "Narlıdere"
-        );
+        const fallbackPopupIzmir = new maplibregl.Popup({
+          autoPan: false,
+        }).setText("İzmir City Center");
+        const fallbackPopupNarlidere = new maplibregl.Popup({
+          autoPan: false,
+        }).setText("Narlıdere");
 
         izmirMarker = new maplibregl.Marker({ element: izmir.wrapper })
           .setLngLat([27.138, 38.4192])
@@ -511,8 +526,13 @@ const DashBoard = () => {
         // ensure popup close button will update state
         const popEl = pIz.getElement();
         if (popEl) {
-          const closeBtn = popEl.querySelector(".maplibregl-popup-close-button");
-          if (closeBtn) closeBtn.addEventListener("click", () => setOpen(null), { once: true });
+          const closeBtn = popEl.querySelector(
+            ".maplibregl-popup-close-button"
+          );
+          if (closeBtn)
+            closeBtn.addEventListener("click", () => setOpen(null), {
+              once: true,
+            });
         }
       }
       if (izCircle) izCircle.classList.add("open");
@@ -532,8 +552,13 @@ const DashBoard = () => {
         pNar.setLngLat([27.0, 38.4]).addTo(mapInstance);
         const popEl = pNar.getElement();
         if (popEl) {
-          const closeBtn = popEl.querySelector(".maplibregl-popup-close-button");
-          if (closeBtn) closeBtn.addEventListener("click", () => setOpen(null), { once: true });
+          const closeBtn = popEl.querySelector(
+            ".maplibregl-popup-close-button"
+          );
+          if (closeBtn)
+            closeBtn.addEventListener("click", () => setOpen(null), {
+              once: true,
+            });
         }
       }
       if (narCircle) narCircle.classList.add("open");
