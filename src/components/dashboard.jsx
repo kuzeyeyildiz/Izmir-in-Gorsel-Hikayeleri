@@ -22,6 +22,69 @@ const Map = ({ onMapReady }) => {
       ],
     });
 
+    // custom zoom control with - and + buttons
+    class SimpleZoomControl {
+      onAdd(mapInstance) {
+        this._map = mapInstance;
+        this._container = document.createElement("div");
+        this._container.className = "maplibregl-ctrl maplibregl-ctrl-group";
+        Object.assign(this._container.style, {
+          display: "flex",
+          flexDirection: "column",
+          background: "rgba(255,255,255,0.9)",
+          borderRadius: "6px",
+          boxShadow: "0 1px 4px rgba(0,0,0,0.3)",
+          overflow: "hidden",
+          margin: "8px",
+        });
+
+        const btnStyle = {
+          width: "36px",
+          height: "36px",
+          border: "none",
+          background: "transparent",
+          cursor: "pointer",
+          fontSize: "18px",
+          lineHeight: "36px",
+          textAlign: "center",
+          padding: "0",
+        };
+
+        const zoomIn = document.createElement("button");
+        zoomIn.innerText = "+";
+        Object.assign(zoomIn.style, btnStyle);
+        zoomIn.title = "Zoom in";
+        zoomIn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          this._map.zoomTo(this._map.getZoom() + 1, { duration: 300 });
+        });
+
+        const zoomOut = document.createElement("button");
+        zoomOut.innerText = "−";
+        Object.assign(zoomOut.style, btnStyle);
+        zoomOut.title = "Zoom out";
+        zoomOut.addEventListener("click", (e) => {
+          e.stopPropagation();
+          this._map.zoomTo(this._map.getZoom() - 1, { duration: 300 });
+        });
+
+        this._container.appendChild(zoomIn);
+        this._container.appendChild(zoomOut);
+
+        return this._container;
+      }
+
+      onRemove() {
+        if (this._container && this._container.parentNode) {
+          this._container.parentNode.removeChild(this._container);
+        }
+        this._map = undefined;
+      }
+    }
+
+    // add the custom control to bottom-left
+    map.addControl(new SimpleZoomControl(), "bottom-left");
+
     map.on("style.load", () => {
       const style = map.getStyle();
       const layers = style?.layers;
@@ -54,26 +117,32 @@ const DashBoard = () => {
 
     const pdfPath = "/assets/gezginler.pdf"; // public/assets/gezginler.pdf
 
-    // create two identical marker elements (city center + narlidere)
-    const createSmallBlue = () => {
-      const el = document.createElement("div");
-      el.style.width = "14px";
-      el.style.height = "14px";
-      el.style.backgroundColor = "#007bff";
-      el.style.borderRadius = "50%";
-      el.style.boxShadow = "0 1px 4px rgba(0,0,0,0.3)";
-      el.style.cursor = "pointer";
-      el.style.transition = "all 150ms ease";
-      return el;
+    // create marker element (small blue/red circle)
+    const createMarker = (color = "#007bff") => {
+      const wrapper = document.createElement("div");
+      wrapper.style.position = "relative";
+      wrapper.style.width = "40px";
+      wrapper.style.height = "40px";
+      wrapper.style.display = "flex";
+      wrapper.style.alignItems = "center";
+      wrapper.style.justifyContent = "center";
+      wrapper.style.pointerEvents = "auto";
+
+      const circle = document.createElement("div");
+      circle.style.width = "14px";
+      circle.style.height = "14px";
+      circle.style.backgroundColor = color;
+      circle.style.borderRadius = "50%";
+      circle.style.boxShadow = "0 1px 4px rgba(0,0,0,0.3)";
+      circle.style.transition = "all 150ms ease";
+      circle.style.pointerEvents = "none";
+
+      wrapper.appendChild(circle);
+      return { wrapper, circle };
     };
 
-    const izmirEl = createSmallBlue();
-    const narlidereEl = createSmallBlue();
-
-    // make Narlıdere marker red
-    narlidereEl.style.backgroundColor = "#ff3b30"; // red
-    // optional: adjust border for contrast
-    narlidereEl.style.border = "2px solid white";
+    const izmir = createMarker("#007bff");
+    const narlidere = createMarker("#ff3b30");
 
     let izmirMarker = null;
     let narlidereMarker = null;
@@ -83,19 +152,87 @@ const DashBoard = () => {
     let isOpenIzmir = false;
     let isOpenNarlidere = false;
 
-    // helper to revert style
-    const revertIzmirStyle = () => {
-      izmirEl.style.width = "14px";
-      izmirEl.style.height = "14px";
-      izmirEl.style.borderRadius = "50%";
-    };
-    const revertNarlidereStyle = () => {
-      narlidereEl.style.width = "14px";
-      narlidereEl.style.height = "14px";
-      narlidereEl.style.borderRadius = "50%";
+    // create popup DOM that contains iframe + like button inside popup
+    const createPopupContentWithLike = (blobUrl, initialLikes = 0) => {
+      const container = document.createElement("div");
+      container.style.position = "relative";
+      container.style.width = "360px";
+      container.style.height = "480px";
+      container.style.boxSizing = "border-box";
+
+      const iframe = document.createElement("iframe");
+      iframe.src = blobUrl + "#toolbar=0&view=fitH";
+      iframe.style.width = "100%";
+      iframe.style.height = "100%";
+      iframe.style.border = "none";
+      iframe.style.display = "block";
+
+      // like button inside popup at bottom-right
+      const likeBtn = document.createElement("button");
+      likeBtn.style.position = "absolute";
+      likeBtn.style.right = "8px";
+      likeBtn.style.bottom = "8px";
+      likeBtn.style.width = "36px";
+      likeBtn.style.height = "36px";
+      likeBtn.style.borderRadius = "18px";
+      likeBtn.style.border = "none";
+      likeBtn.style.background = "white";
+      likeBtn.style.boxShadow = "0 1px 4px rgba(0,0,0,0.2)";
+      likeBtn.style.cursor = "pointer";
+      likeBtn.style.display = "flex";
+      likeBtn.style.alignItems = "center";
+      likeBtn.style.justifyContent = "center";
+      likeBtn.style.fontSize = "16px";
+      likeBtn.title = "Like";
+
+      const heart = document.createElement("span");
+      heart.innerText = "♡";
+      heart.style.color = "#ff3b30";
+      heart.style.pointerEvents = "none";
+
+      const badge = document.createElement("span");
+      badge.innerText = String(initialLikes);
+      badge.style.position = "absolute";
+      badge.style.top = "-6px";
+      badge.style.right = "-6px";
+      badge.style.minWidth = "18px";
+      badge.style.height = "18px";
+      badge.style.padding = "0 4px";
+      badge.style.borderRadius = "9px";
+      badge.style.background = "#ff3b30";
+      badge.style.color = "white";
+      badge.style.fontSize = "12px";
+      badge.style.display = initialLikes > 0 ? "flex" : "none";
+      badge.style.alignItems = "center";
+      badge.style.justifyContent = "center";
+
+      likeBtn.appendChild(heart);
+      likeBtn.appendChild(badge);
+      container.appendChild(iframe);
+      container.appendChild(likeBtn);
+
+      // like state
+      let liked = false;
+      let likes = initialLikes;
+
+      likeBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        liked = !liked;
+        if (liked) {
+          likes += 1;
+          heart.innerText = "♥";
+        } else {
+          likes = Math.max(0, likes - 1);
+          heart.innerText = "♡";
+        }
+        badge.innerText = String(likes);
+        badge.style.display = likes > 0 ? "flex" : "none";
+      });
+
+      return container;
     };
 
-    // fetch PDF once and create two popups using the same blob URL
     fetch(pdfPath)
       .then((res) => {
         if (!res.ok) throw new Error("PDF fetch failed: " + res.status);
@@ -104,70 +241,57 @@ const DashBoard = () => {
       .then((blob) => {
         pdfBlobUrl = URL.createObjectURL(blob);
 
-        // Izmir popup + marker
-        const iframeIzmir = document.createElement("iframe");
-        iframeIzmir.src = pdfBlobUrl + "#toolbar=0&view=fitH";
-        iframeIzmir.style.width = "360px";
-        iframeIzmir.style.height = "480px";
-        iframeIzmir.style.border = "none";
-
+        // popups containing iframe + like button
         popupIzmir = new maplibregl.Popup({ maxWidth: "380px", autoPan: false }).setDOMContent(
-          iframeIzmir
+          createPopupContentWithLike(pdfBlobUrl, 0)
+        );
+        popupNarlidere = new maplibregl.Popup({ maxWidth: "380px", autoPan: false }).setDOMContent(
+          createPopupContentWithLike(pdfBlobUrl, 0)
         );
 
-        izmirMarker = new maplibregl.Marker({ element: izmirEl, anchor: "center" })
+        izmirMarker = new maplibregl.Marker({ element: izmir.wrapper, anchor: "center" })
           .setLngLat([27.138, 38.4192])
           .setPopup(popupIzmir)
           .addTo(mapInstance);
 
-        // Aynı şey işte
-        const iframeNarlidere = document.createElement("iframe");
-        iframeNarlidere.src = pdfBlobUrl + "#toolbar=0&view=fitH";
-        iframeNarlidere.style.width = "360px";
-        iframeNarlidere.style.height = "480px";
-        iframeNarlidere.style.border = "none";
-
-        popupNarlidere = new maplibregl.Popup({ maxWidth: "380px", autoPan: false }).setDOMContent(
-          iframeNarlidere
-        );
-
-        narlidereMarker = new maplibregl.Marker({ element: narlidereEl, anchor: "center" })
+        narlidereMarker = new maplibregl.Marker({ element: narlidere.wrapper, anchor: "center" })
           .setLngLat([27.0, 38.4])
           .setPopup(popupNarlidere)
           .addTo(mapInstance);
 
-        // open/close helpers (ensure clicking one closes the other)
-        const openIzmir = () => {
+        const revert = (circle) => {
+          circle.style.width = "14px";
+          circle.style.height = "14px";
+          circle.style.borderRadius = "50%";
+        };
+
+        const openPopup = (opts) => {
+          const { circle, popup, coords, otherPopup, otherCircleRefSetter } = opts;
           // close other
-          if (isOpenNarlidere && popupNarlidere) {
-            popupNarlidere.remove();
-            revertNarlidereStyle();
-            isOpenNarlidere = false;
+          if (otherPopup) {
+            otherPopup.remove();
+            if (otherCircleRefSetter) otherCircleRefSetter();
           }
 
-          izmirEl.style.width = "40px";
-          izmirEl.style.height = "40px";
-          izmirEl.style.borderRadius = "6px";
-          popupIzmir.setLngLat([27.138, 38.4192]).addTo(mapInstance);
-          isOpenIzmir = true;
+          circle.style.width = "40px";
+          circle.style.height = "40px";
+          circle.style.borderRadius = "6px";
+          popup.setLngLat(coords).addTo(mapInstance);
 
           const onMapClickRevert = () => {
-            revertIzmirStyle();
-            isOpenIzmir = false;
+            revert(circle);
             mapInstance.off("click", onMapClickRevert);
-            if (popupIzmir) popupIzmir.remove();
+            popup.remove();
           };
           mapInstance.once("click", onMapClickRevert);
 
-          const popEl = popupIzmir.getElement();
+          const popEl = popup.getElement();
           if (popEl) {
             const closeBtn = popEl.querySelector(".maplibregl-popup-close-button");
             if (closeBtn) {
               closeBtn.addEventListener(
-                "click",
                 () => {
-                  revertIzmirStyle();
-                  isOpenIzmir = false;
+                  revert(circle);
                 },
                 { once: true }
               );
@@ -175,71 +299,58 @@ const DashBoard = () => {
           }
         };
 
-        const openNarlidere = () => {
-          // yok eben
-          if (isOpenIzmir && popupIzmir) {
-            popupIzmir.remove();
-            revertIzmirStyle();
-            isOpenIzmir = false;
-          }
-
-          narlidereEl.style.width = "40px";
-          narlidereEl.style.height = "40px";
-          narlidereEl.style.borderRadius = "6px";
-          popupNarlidere.setLngLat([27.0, 38.4]).addTo(mapInstance);
-          isOpenNarlidere = true;
-
-          const onMapClickRevert = () => {
-            revertNarlidereStyle();
-            isOpenNarlidere = false;
-            mapInstance.off("click", onMapClickRevert);
-            if (popupNarlidere) popupNarlidere.remove();
-          };
-          mapInstance.once("click", onMapClickRevert);
-
-          const popEl = popupNarlidere.getElement();
-          if (popEl) {
-            const closeBtn = popEl.querySelector(".maplibregl-popup-close-button");
-            if (closeBtn) {
-              closeBtn.addEventListener(
-                "click",
-                () => {
-                  revertNarlidereStyle();
-                  isOpenNarlidere = false;
-                },
-                { once: true }
-              );
-            }
-          }
-        };
-
-        // açılıp kapatma şeysi
-        izmirEl.addEventListener("click", (e) => {
+        // Izmir click handler
+        izmir.wrapper.addEventListener("click", (e) => {
           e.stopPropagation();
           if (isOpenIzmir) {
             if (popupIzmir) popupIzmir.remove();
-            revertIzmirStyle();
+            revert(izmir.circle);
             isOpenIzmir = false;
             return;
           }
-          openIzmir();
+          // close other if open
+          if (isOpenNarlidere && popupNarlidere) {
+            popupNarlidere.remove();
+            revert(narlidere.circle);
+            isOpenNarlidere = false;
+          }
+          openPopup({
+            circle: izmir.circle,
+            popup: popupIzmir,
+            coords: [27.138, 38.4192],
+            otherPopup: popupNarlidere,
+            otherCircleRefSetter: () => revert(narlidere.circle),
+          });
+          isOpenIzmir = true;
         });
 
-        narlidereEl.addEventListener("click", (e) => {
+        // Narlidere click handler
+        narlidere.wrapper.addEventListener("click", (e) => {
           e.stopPropagation();
           if (isOpenNarlidere) {
             if (popupNarlidere) popupNarlidere.remove();
-            revertNarlidereStyle();
+            revert(narlidere.circle);
             isOpenNarlidere = false;
             return;
           }
-          openNarlidere();
+          if (isOpenIzmir && popupIzmir) {
+            popupIzmir.remove();
+            revert(izmir.circle);
+            isOpenIzmir = false;
+          }
+          openPopup({
+            circle: narlidere.circle,
+            popup: popupNarlidere,
+            coords: [27.0, 38.4],
+            otherPopup: popupIzmir,
+            otherCircleRefSetter: () => revert(izmir.circle),
+          });
+          isOpenNarlidere = true;
         });
       })
       .catch((err) => {
         console.error("Failed to load PDF for marker popups:", err);
 
-        // CİRCLE BLUE
         const fallbackPopupIzmir = new maplibregl.Popup({ autoPan: false }).setText(
           "İzmir City Center"
         );
@@ -247,39 +358,43 @@ const DashBoard = () => {
           "Narlıdere"
         );
 
-        izmirMarker = new maplibregl.Marker({ element: izmirEl })
+        izmirMarker = new maplibregl.Marker({ element: izmir.wrapper })
           .setLngLat([27.138, 38.4192])
           .setPopup(fallbackPopupIzmir)
           .addTo(mapInstance);
 
-        narlidereMarker = new maplibregl.Marker({ element: narlidereEl })
+        narlidereMarker = new maplibregl.Marker({ element: narlidere.wrapper })
           .setLngLat([27.0, 38.4])
           .setPopup(fallbackPopupNarlidere)
           .addTo(mapInstance);
 
-        // Simpler massev
-        let fbOpenIzmir = false;
-        izmirEl.addEventListener("click", (e) => {
+        // simple toggle behavior for fallback
+        izmir.wrapper.addEventListener("click", (e) => {
           e.stopPropagation();
-          if (fbOpenIzmir) {
+          izmir.circle.style.width = "40px";
+          izmir.circle.style.height = "40px";
+          izmir.circle.style.borderRadius = "6px";
+          fallbackPopupIzmir.setLngLat([27.138, 38.4192]).addTo(mapInstance);
+          mapInstance.once("click", () => {
+            izmir.circle.style.width = "14px";
+            izmir.circle.style.height = "14px";
+            izmir.circle.style.borderRadius = "50%";
             fallbackPopupIzmir.remove();
-            fbOpenIzmir = false;
-          } else {
-            fallbackPopupIzmir.setLngLat([27.138, 38.4192]).addTo(mapInstance);
-            fbOpenIzmir = true;
-          }
+          });
         });
 
-        let fbOpenNar = false;
-        narlidereEl.addEventListener("click", (e) => {
+        narlidere.wrapper.addEventListener("click", (e) => {
           e.stopPropagation();
-          if (fbOpenNar) {
+          narlidere.circle.style.width = "40px";
+          narlidere.circle.style.height = "40px";
+          narlidere.circle.style.borderRadius = "6px";
+          fallbackPopupNarlidere.setLngLat([27.0, 38.4]).addTo(mapInstance);
+          mapInstance.once("click", () => {
+            narlidere.circle.style.width = "14px";
+            narlidere.circle.style.height = "14px";
+            narlidere.circle.style.borderRadius = "50%";
             fallbackPopupNarlidere.remove();
-            fbOpenNar = false;
-          } else {
-            fallbackPopupNarlidere.setLngLat([27.0, 38.4]).addTo(mapInstance);
-            fbOpenNar = true;
-          }
+          });
         });
       });
 
