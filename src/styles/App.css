@@ -5,4 +5,10 @@
            shadow-md flex items-center justify-center 
            text-base cursor-pointer;
   }
+  .wrapper-like {
+    @apply relative w-10 h-10 flex items-center justify-center pointer-events-auto;
+  }
+  .like-circle {
+    @apply w-[14px] h-[14px] rounded-full shadow-md transition-all duration-150 ease-in-out pointer-events-none;
+  }
 }
