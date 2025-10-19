@@ -23,8 +23,9 @@ const Map = ({ onMapReady }) => {
     map.on("style.load", () => {
       const style = map.getStyle();
       const layers = style?.layers;
-
       if (!layers) return;
+
+      // Hide POI and symbol layers for a cleaner map
       layers.forEach((layer) => {
         if (layer.id.toLowerCase().includes("poi") || layer.type === "symbol") {
           map.setLayoutProperty(layer.id, "visibility", "none");
@@ -52,23 +53,41 @@ const DashBoard = () => {
   useEffect(() => {
     if (!mapInstance) return;
 
-    // Create custom marker element
-    const el = document.createElement("div");
-    el.style.width = "20px";
-    el.style.height = "20px";
-    el.style.backgroundColor = "#007bff";
-    el.style.borderRadius = "50%";
-    el.style.border = "2px solid white";
-    el.style.boxShadow = "0 0 6px rgba(0,0,0,0.3)";
-    el.style.cursor = "pointer";
+    // Marker for İzmir City Center
+    const izmirMarkerEl = document.createElement("div");
+    izmirMarkerEl.style.width = "20px";
+    izmirMarkerEl.style.height = "20px";
+    izmirMarkerEl.style.backgroundColor = "#007bff";
+    izmirMarkerEl.style.borderRadius = "50%";
+    izmirMarkerEl.style.border = "2px solid white";
+    izmirMarkerEl.style.boxShadow = "0 0 6px rgba(0,0,0,0.3)";
+    izmirMarkerEl.style.cursor = "pointer";
 
-    // Add marker
-    const marker = new maplibregl.Marker({ element: el })
+    const izmirMarker = new maplibregl.Marker({ element: izmirMarkerEl })
       .setLngLat([27.138, 38.4192])
       .setPopup(new maplibregl.Popup().setText("İzmir City Center"))
       .addTo(mapInstance);
 
-    return () => marker.remove();
+    // Marker for Narlıdere
+    const narlidereEl = document.createElement("div");
+    narlidereEl.style.width = "20px";
+    narlidereEl.style.height = "20px";
+    narlidereEl.style.backgroundColor = "#28a745"; // green color for distinction
+    narlidereEl.style.borderRadius = "50%";
+    narlidereEl.style.border = "2px solid white";
+    narlidereEl.style.boxShadow = "0 0 6px rgba(0,0,0,0.3)";
+    narlidereEl.style.cursor = "pointer";
+
+    const narlidereMarker = new maplibregl.Marker({ element: narlidereEl })
+      .setLngLat([27.0, 38.4]) // approximate coordinates for Narlıdere
+      .setPopup(new maplibregl.Popup().setText("Narlıdere"))
+      .addTo(mapInstance);
+
+    // Cleanup
+    return () => {
+      izmirMarker.remove();
+      narlidereMarker.remove();
+    };
   }, [mapInstance]);
 
   return (
