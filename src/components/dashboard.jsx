@@ -2,24 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 
-import { getDocument, GlobalWorkerOptions } from "pdfjs-dist";
-import pdfWorker from "pdfjs-dist/build/pdf.worker.entry";
-
-GlobalWorkerOptions.workerSrc = pdfWorker;
-
-// helper: render first page of a PDF URL to a dataURL
-async function renderPdfPageToDataUrl(pdfUrl, pageNumber = 1, scale = 1.0) {
-  const loadingTask = getDocument(pdfUrl);
-  const pdf = await loadingTask.promise;
-  const page = await pdf.getPage(pageNumber);
-  const viewport = page.getViewport({ scale });
-  const canvas = document.createElement("canvas");
-  canvas.width = viewport.width;
-  canvas.height = viewport.height;
-  const ctx = canvas.getContext("2d");
-  await page.render({ canvasContext: ctx, viewport }).promise;
-  return canvas.toDataURL("image/png");
-}
+// no pdfjs-dist here — we fetch the PDF as a blob and embed in an iframe popup
 
 const Map = ({ onMapReady }) => {
   const mapContainer = useRef(null);
@@ -31,11 +14,11 @@ const Map = ({ onMapReady }) => {
       container: mapContainer.current,
       style:
         "https://api.maptiler.com/maps/streets-v4/style.json?key=jhCcpBmLi8AmPxpV9Clp",
-      center: [27.138, 38.4192], // İzmir city center
+      center: [27.138, 38.4192],
       zoom: 11.5,
       maxBounds: [
-        [25.6, 37.6], // Southwest limit
-        [28.4, 39.5], // Northeast limit
+        [25.6, 37.6],
+        [28.4, 39.5],
       ],
     });
 
@@ -43,8 +26,6 @@ const Map = ({ onMapReady }) => {
       const style = map.getStyle();
       const layers = style?.layers;
       if (!layers) return;
-
-      // Hide POI and symbol layers for a cleaner map
       layers.forEach((layer) => {
         if (layer.id.toLowerCase().includes("poi") || layer.type === "symbol") {
           map.setLayoutProperty(layer.id, "visibility", "none");
@@ -53,7 +34,6 @@ const Map = ({ onMapReady }) => {
     });
 
     onMapReady(map);
-
     return () => map.remove();
   }, [onMapReady]);
 
@@ -74,93 +54,240 @@ const DashBoard = () => {
 
     const pdfPath = "/assets/gezginler.pdf"; // public/assets/gezginler.pdf
 
-    // create placeholder image element
-    const izmirImg = document.createElement("img");
-    izmirImg.style.width = "48px";
-    izmirImg.style.height = "48px";
-    izmirImg.style.objectFit = "cover";
-    izmirImg.style.borderRadius = "6px";
-    izmirImg.style.boxShadow = "0 1px 4px rgba(0,0,0,0.3)";
-    izmirImg.style.cursor = "pointer";
-    izmirImg.src =
-      "data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48'%3E%3Crect width='48' height='48' rx='6' fill='%23007bff'/%3E%3C/svg%3E";
+    // create two identical marker elements (city center + narlidere)
+    const createSmallBlue = () => {
+      const el = document.createElement("div");
+      el.style.width = "14px";
+      el.style.height = "14px";
+      el.style.backgroundColor = "#007bff";
+      el.style.borderRadius = "50%";
+      el.style.boxShadow = "0 1px 4px rgba(0,0,0,0.3)";
+      el.style.cursor = "pointer";
+      el.style.transition = "all 150ms ease";
+      return el;
+    };
+
+    const izmirEl = createSmallBlue();
+    const narlidereEl = createSmallBlue();
+
+    // make Narlıdere marker red
+    narlidereEl.style.backgroundColor = "#ff3b30"; // red
+    // optional: adjust border for contrast
+    narlidereEl.style.border = "2px solid white";
 
     let izmirMarker = null;
+    let narlidereMarker = null;
+    let popupIzmir = null;
+    let popupNarlidere = null;
     let pdfBlobUrl = null;
-    let popup = null;
+    let isOpenIzmir = false;
+    let isOpenNarlidere = false;
 
-    // render first page (for icon) + fetch blob (for iframe) in parallel
-    Promise.all([
-      renderPdfPageToDataUrl(pdfPath, 1, 1.0).catch(() => null),
-      fetch(pdfPath)
-        .then((res) => {
-          if (!res.ok) throw new Error("fetch failed");
-          return res.blob();
-        })
-        .then((b) => {
-          pdfBlobUrl = URL.createObjectURL(b);
-          return pdfBlobUrl;
-        })
-        .catch(() => null),
-    ])
-      .then(([dataUrl, blobUrl]) => {
-        if (dataUrl) izmirImg.src = dataUrl;
+    // helper to revert style
+    const revertIzmirStyle = () => {
+      izmirEl.style.width = "14px";
+      izmirEl.style.height = "14px";
+      izmirEl.style.borderRadius = "50%";
+    };
+    const revertNarlidereStyle = () => {
+      narlidereEl.style.width = "14px";
+      narlidereEl.style.height = "14px";
+      narlidereEl.style.borderRadius = "50%";
+    };
 
-        const iframe = document.createElement("iframe");
-        // prefer blob URL to avoid embedding/cors issues
-        iframe.src = (blobUrl || pdfPath) + "#toolbar=0&view=fitH";
-        iframe.style.width = "360px";
-        iframe.style.height = "480px";
-        iframe.style.border = "none";
+    // fetch PDF once and create two popups using the same blob URL
+    fetch(pdfPath)
+      .then((res) => {
+        if (!res.ok) throw new Error("PDF fetch failed: " + res.status);
+        return res.blob();
+      })
+      .then((blob) => {
+        pdfBlobUrl = URL.createObjectURL(blob);
 
-        // ensure popup can be large enough
-        popup = new maplibregl.Popup({ maxWidth: "380px" }).setDOMContent(iframe);
+        // Izmir popup + marker
+        const iframeIzmir = document.createElement("iframe");
+        iframeIzmir.src = pdfBlobUrl + "#toolbar=0&view=fitH";
+        iframeIzmir.style.width = "360px";
+        iframeIzmir.style.height = "480px";
+        iframeIzmir.style.border = "none";
 
-        izmirMarker = new maplibregl.Marker({ element: izmirImg })
+        popupIzmir = new maplibregl.Popup({ maxWidth: "380px", autoPan: false }).setDOMContent(
+          iframeIzmir
+        );
+
+        izmirMarker = new maplibregl.Marker({ element: izmirEl, anchor: "center" })
           .setLngLat([27.138, 38.4192])
-          .setPopup(popup)
+          .setPopup(popupIzmir)
           .addTo(mapInstance);
 
-        // extra: ensure click definitely opens the popup
-        izmirMarker.getElement().addEventListener("click", (e) => {
-          // avoid default propagation issues
+        // Aynı şey işte
+        const iframeNarlidere = document.createElement("iframe");
+        iframeNarlidere.src = pdfBlobUrl + "#toolbar=0&view=fitH";
+        iframeNarlidere.style.width = "360px";
+        iframeNarlidere.style.height = "480px";
+        iframeNarlidere.style.border = "none";
+
+        popupNarlidere = new maplibregl.Popup({ maxWidth: "380px", autoPan: false }).setDOMContent(
+          iframeNarlidere
+        );
+
+        narlidereMarker = new maplibregl.Marker({ element: narlidereEl, anchor: "center" })
+          .setLngLat([27.0, 38.4])
+          .setPopup(popupNarlidere)
+          .addTo(mapInstance);
+
+        // open/close helpers (ensure clicking one closes the other)
+        const openIzmir = () => {
+          // close other
+          if (isOpenNarlidere && popupNarlidere) {
+            popupNarlidere.remove();
+            revertNarlidereStyle();
+            isOpenNarlidere = false;
+          }
+
+          izmirEl.style.width = "40px";
+          izmirEl.style.height = "40px";
+          izmirEl.style.borderRadius = "6px";
+          popupIzmir.setLngLat([27.138, 38.4192]).addTo(mapInstance);
+          isOpenIzmir = true;
+
+          const onMapClickRevert = () => {
+            revertIzmirStyle();
+            isOpenIzmir = false;
+            mapInstance.off("click", onMapClickRevert);
+            if (popupIzmir) popupIzmir.remove();
+          };
+          mapInstance.once("click", onMapClickRevert);
+
+          const popEl = popupIzmir.getElement();
+          if (popEl) {
+            const closeBtn = popEl.querySelector(".maplibregl-popup-close-button");
+            if (closeBtn) {
+              closeBtn.addEventListener(
+                "click",
+                () => {
+                  revertIzmirStyle();
+                  isOpenIzmir = false;
+                },
+                { once: true }
+              );
+            }
+          }
+        };
+
+        const openNarlidere = () => {
+          // yok eben
+          if (isOpenIzmir && popupIzmir) {
+            popupIzmir.remove();
+            revertIzmirStyle();
+            isOpenIzmir = false;
+          }
+
+          narlidereEl.style.width = "40px";
+          narlidereEl.style.height = "40px";
+          narlidereEl.style.borderRadius = "6px";
+          popupNarlidere.setLngLat([27.0, 38.4]).addTo(mapInstance);
+          isOpenNarlidere = true;
+
+          const onMapClickRevert = () => {
+            revertNarlidereStyle();
+            isOpenNarlidere = false;
+            mapInstance.off("click", onMapClickRevert);
+            if (popupNarlidere) popupNarlidere.remove();
+          };
+          mapInstance.once("click", onMapClickRevert);
+
+          const popEl = popupNarlidere.getElement();
+          if (popEl) {
+            const closeBtn = popEl.querySelector(".maplibregl-popup-close-button");
+            if (closeBtn) {
+              closeBtn.addEventListener(
+                "click",
+                () => {
+                  revertNarlidereStyle();
+                  isOpenNarlidere = false;
+                },
+                { once: true }
+              );
+            }
+          }
+        };
+
+        // açılıp kapatma şeysi
+        izmirEl.addEventListener("click", (e) => {
           e.stopPropagation();
-          popup.addTo(mapInstance).setLngLat([27.138, 38.4192]);
+          if (isOpenIzmir) {
+            if (popupIzmir) popupIzmir.remove();
+            revertIzmirStyle();
+            isOpenIzmir = false;
+            return;
+          }
+          openIzmir();
+        });
+
+        narlidereEl.addEventListener("click", (e) => {
+          e.stopPropagation();
+          if (isOpenNarlidere) {
+            if (popupNarlidere) popupNarlidere.remove();
+            revertNarlidereStyle();
+            isOpenNarlidere = false;
+            return;
+          }
+          openNarlidere();
         });
       })
       .catch((err) => {
-        console.error("PDF handling failed:", err);
-        const fallback = document.createElement("div");
-        fallback.style.width = "20px";
-        fallback.style.height = "20px";
-        fallback.style.backgroundColor = "#007bff";
-        fallback.style.borderRadius = "50%";
-        izmirMarker = new maplibregl.Marker({ element: fallback })
+        console.error("Failed to load PDF for marker popups:", err);
+
+        // CİRCLE BLUE
+        const fallbackPopupIzmir = new maplibregl.Popup({ autoPan: false }).setText(
+          "İzmir City Center"
+        );
+        const fallbackPopupNarlidere = new maplibregl.Popup({ autoPan: false }).setText(
+          "Narlıdere"
+        );
+
+        izmirMarker = new maplibregl.Marker({ element: izmirEl })
           .setLngLat([27.138, 38.4192])
-          .setPopup(new maplibregl.Popup().setText("İzmir City Center"))
+          .setPopup(fallbackPopupIzmir)
           .addTo(mapInstance);
+
+        narlidereMarker = new maplibregl.Marker({ element: narlidereEl })
+          .setLngLat([27.0, 38.4])
+          .setPopup(fallbackPopupNarlidere)
+          .addTo(mapInstance);
+
+        // Simpler massev
+        let fbOpenIzmir = false;
+        izmirEl.addEventListener("click", (e) => {
+          e.stopPropagation();
+          if (fbOpenIzmir) {
+            fallbackPopupIzmir.remove();
+            fbOpenIzmir = false;
+          } else {
+            fallbackPopupIzmir.setLngLat([27.138, 38.4192]).addTo(mapInstance);
+            fbOpenIzmir = true;
+          }
+        });
+
+        let fbOpenNar = false;
+        narlidereEl.addEventListener("click", (e) => {
+          e.stopPropagation();
+          if (fbOpenNar) {
+            fallbackPopupNarlidere.remove();
+            fbOpenNar = false;
+          } else {
+            fallbackPopupNarlidere.setLngLat([27.0, 38.4]).addTo(mapInstance);
+            fbOpenNar = true;
+          }
+        });
       });
 
-    // narlıdere marker (unchanged)
-    const narlidereEl = document.createElement("div");
-    narlidereEl.style.width = "20px";
-    narlidereEl.style.height = "20px";
-    narlidereEl.style.backgroundColor = "#28a745";
-    narlidereEl.style.borderRadius = "50%";
-    narlidereEl.style.border = "2px solid white";
-    narlidereEl.style.boxShadow = "0 0 6px rgba(0,0,0,0.3)";
-    narlidereEl.style.cursor = "pointer";
-
-    const narlidereMarker = new maplibregl.Marker({ element: narlidereEl })
-      .setLngLat([27.0, 38.4])
-      .setPopup(new maplibregl.Popup().setText("narlıdere"))
-      .addTo(mapInstance);
-
-    // Cleanup
     return () => {
       if (izmirMarker) izmirMarker.remove();
       if (narlidereMarker) narlidereMarker.remove();
-      if (popup) popup.remove();
+      if (popupIzmir) popupIzmir.remove();
+      if (popupNarlidere) popupNarlidere.remove();
       if (pdfBlobUrl) URL.revokeObjectURL(pdfBlobUrl);
     };
   }, [mapInstance]);
