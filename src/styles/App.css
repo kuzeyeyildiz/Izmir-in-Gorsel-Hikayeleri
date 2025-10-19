@@ -1,0 +1,5 @@
+@layer components {
+  .like-btn {
+    @apply absolute right-2 bottom-2 w-9 h-9 rounded-full border-none bg-white shadow-md flex items-center justify-center text-base cursor-pointer;
+  }
+}
