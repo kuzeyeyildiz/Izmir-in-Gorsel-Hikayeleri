@@ -11,4 +11,8 @@
   .like-circle {
     @apply w-[14px] h-[14px] rounded-full shadow-md transition-all duration-150 ease-in-out pointer-events-none;
   }
+  .like-badge {
+    @apply absolute -top-[6px] -right-[6px] min-w-[18px] h-[18px] px-1 rounded-[9px]
+           bg-[#ff3b30] text-white text-[12px]
+           flex items-center justify-center;
 }
