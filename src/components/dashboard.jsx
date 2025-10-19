@@ -2,6 +2,72 @@ import { useEffect, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 
+// inject aesthetic marker CSS once
+if (typeof document !== "undefined" && !document.getElementById("custom-marker-styles")) {
+  const style = document.createElement("style");
+  style.id = "custom-marker-styles";
+  style.textContent = `
+    .custom-marker-wrapper {
+      position: relative;
+      width: 40px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      pointer-events: auto;
+    }
+    .custom-marker {
+      position: relative;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #2563eb 0%, rgba(37,99,235,0.85) 60%);
+      box-shadow: 0 6px 14px rgba(16,24,40,0.18), inset 0 -2px 6px rgba(255,255,255,0.06);
+      transition: transform 160ms ease, width 160ms ease, height 160ms ease, border-radius 160ms ease, box-shadow 160ms ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .custom-marker::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%) scale(0.9);
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      background: radial-gradient(circle at center, rgba(37,99,235,0.12), rgba(37,99,235,0.02));
+      opacity: 0;
+      transition: opacity 160ms ease, transform 160ms ease;
+      pointer-events: none;
+    }
+    .custom-marker:hover {
+      transform: translateY(-3px) scale(1.05);
+      box-shadow: 0 10px 24px rgba(16,24,40,0.22);
+    }
+    .custom-marker:hover::after { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+    .custom-marker.open {
+      width: 40px;
+      height: 40px;
+      border-radius: 6px;
+      transform: none;
+    }
+    .custom-marker .marker-inner {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.9);
+      box-shadow: 0 1px 0 rgba(0,0,0,0.06) inset;
+    }
+    /* red variant helper */
+    .custom-marker.red {
+      background: linear-gradient(135deg, #ef4444 0%, rgba(239,68,68,0.9) 60%);
+    }
+  `;
+  document.head.appendChild(style);
+}
+
 // pdfjs (Vite-friendly)
 import { getDocument, GlobalWorkerOptions } from "pdfjs-dist/legacy/build/pdf";
 GlobalWorkerOptions.workerSrc = new URL(
@@ -139,45 +205,71 @@ const Map = ({ onMapReady }) => {
 const DashBoard = () => {
   const [mapInstance, setMapInstance] = useState(null);
 
+  // use React state to track which marker is open: "izmir" | "narlidere" | null
+  const [openMarker, setOpenMarker] = useState(null);
+  const openRef = useRef(null);
+  // keep a stable setter that updates ref + state
+  const setOpen = (val) => {
+    openRef.current = val;
+    setOpenMarker(val);
+  };
+
+  // refs to DOM/Map objects so we can manage them from useEffect that watches openMarker
+  const izmirCircleRef = useRef(null);
+  const narlidereCircleRef = useRef(null);
+  const popupIzmirRef = useRef(null);
+  const popupNarlidereRef = useRef(null);
+  const izmirMarkerRef = useRef(null);
+  const narlidereMarkerRef = useRef(null);
+  const pdfBlobUrlRef = useRef(null);
+
   useEffect(() => {
     if (!mapInstance) return;
 
     const pdfPath = "/assets/gezginler.pdf"; // public/assets/gezginler.pdf
 
-    // small marker creator
+    // replace the old createMarker with this aesthetic version
     const createMarker = (color = "#007bff") => {
       const wrapper = document.createElement("div");
-      wrapper.style.position = "relative";
-      wrapper.style.width = "40px";
-      wrapper.style.height = "40px";
-      wrapper.style.display = "flex";
-      wrapper.style.alignItems = "center";
-      wrapper.style.justifyContent = "center";
-      wrapper.style.pointerEvents = "auto";
+      wrapper.className = "custom-marker-wrapper";
 
       const circle = document.createElement("div");
+      circle.className = "custom-marker";
+      // apply red class for red color input to keep consistent gradient
+      if (color === "#ff3b30" || color.toLowerCase().includes("ff3b30") || color.toLowerCase().includes("red")) {
+        circle.classList.add("red");
+      } else {
+        // allow custom color by setting inline gradient fallback
+        circle.style.background = `linear-gradient(135deg, ${color} 0%, rgba(0,0,0,0.08) 60%)`;
+      }
+
+      // small white inner dot for contrast
+      const inner = document.createElement("div");
+      inner.className = "marker-inner";
+      circle.appendChild(inner);
+
+      // keep initial sizing inline so existing open/revert logic still works
       circle.style.width = "14px";
       circle.style.height = "14px";
-      circle.style.backgroundColor = color;
       circle.style.borderRadius = "50%";
-      circle.style.boxShadow = "0 1px 4px rgba(0,0,0,0.3)";
-      circle.style.transition = "all 150ms ease";
-      circle.style.pointerEvents = "none";
 
       wrapper.appendChild(circle);
+
       return { wrapper, circle };
     };
 
     const izmir = createMarker("#007bff");
     const narlidere = createMarker("#ff3b30");
 
+    // store circle DOM refs so other effects can toggle classes
+    izmirCircleRef.current = izmir.circle;
+    narlidereCircleRef.current = narlidere.circle;
+
     let izmirMarker = null;
     let narlidereMarker = null;
     let popupIzmir = null;
     let popupNarlidere = null;
     let pdfBlobUrl = null;
-    let isOpenIzmir = false;
-    let isOpenNarlidere = false;
 
     // create popup content: will render thumbnail image inside popup and include like button
     const createPopupContentWithPreview = (blobUrl, initialLikes = 0) => {
@@ -289,6 +381,7 @@ const DashBoard = () => {
       })
       .then((blob) => {
         pdfBlobUrl = URL.createObjectURL(blob);
+        pdfBlobUrlRef.current = pdfBlobUrl;
 
         popupIzmir = new maplibregl.Popup({ maxWidth: "380px", autoPan: false }).setDOMContent(
           createPopupContentWithPreview(pdfBlobUrl, 0)
@@ -296,6 +389,10 @@ const DashBoard = () => {
         popupNarlidere = new maplibregl.Popup({ maxWidth: "380px", autoPan: false }).setDOMContent(
           createPopupContentWithPreview(pdfBlobUrl, 0)
         );
+
+        // store popup refs for external effect
+        popupIzmirRef.current = popupIzmir;
+        popupNarlidereRef.current = popupNarlidere;
 
         izmirMarker = new maplibregl.Marker({ element: izmir.wrapper, anchor: "center" })
           .setLngLat([27.138, 38.4192])
@@ -307,88 +404,31 @@ const DashBoard = () => {
           .setPopup(popupNarlidere)
           .addTo(mapInstance);
 
-        const revert = (circle) => {
-          circle.style.width = "14px";
-          circle.style.height = "14px";
-          circle.style.borderRadius = "50%";
+        izmirMarkerRef.current = izmirMarker;
+        narlidereMarkerRef.current = narlidereMarker;
+
+        const revert = (circleEl) => {
+          if (!circleEl) return;
+          circleEl.classList.remove("open");
         };
 
-        const openPopup = (opts) => {
-          const { circle, popup, coords, otherPopup, otherCircleRefSetter } = opts;
-          if (otherPopup) {
-            otherPopup.remove();
-            if (otherCircleRefSetter) otherCircleRefSetter();
-          }
-          circle.style.width = "40px";
-          circle.style.height = "40px";
-          circle.style.borderRadius = "6px";
-          popup.setLngLat(coords).addTo(mapInstance);
-
-          const onMapClickRevert = () => {
-            revert(circle);
-            mapInstance.off("click", onMapClickRevert);
-            popup.remove();
-          };
-          mapInstance.once("click", onMapClickRevert);
-
-          const popEl = popup.getElement();
-          if (popEl) {
-            const closeBtn = popEl.querySelector(".maplibregl-popup-close-button");
-            if (closeBtn) {
-              closeBtn.addEventListener(
-                () => {
-                  revert(circle);
-                },
-                { once: true }
-              );
-            }
-          }
-        };
-
+        // click handlers now only toggle open state (React state)
         izmir.wrapper.addEventListener("click", (e) => {
           e.stopPropagation();
-          if (isOpenIzmir) {
-            if (popupIzmir) popupIzmir.remove();
-            revert(izmir.circle);
-            isOpenIzmir = false;
+          if (openRef.current === "izmir") {
+            setOpen(null);
             return;
           }
-          if (isOpenNarlidere && popupNarlidere) {
-            popupNarlidere.remove();
-            revert(narlidere.circle);
-            isOpenNarlidere = false;
-          }
-          openPopup({
-            circle: izmir.circle,
-            popup: popupIzmir,
-            coords: [27.138, 38.4192],
-            otherPopup: popupNarlidere,
-            otherCircleRefSetter: () => revert(narlidere.circle),
-          });
-          isOpenIzmir = true;
+          setOpen("izmir");
         });
 
         narlidere.wrapper.addEventListener("click", (e) => {
           e.stopPropagation();
-          if (isOpenNarlidere) {
-            if (popupNarlidere) popupNarlidere.remove();
-            revert(narlidere.circle);
-            isOpenNarlidere = false;
+          if (openRef.current === "narlidere") {
+            setOpen(null);
             return;
           }
-          if (isOpenIzmir && popupIzmir) {
-            popupIzmir.remove();
-            revert(izmir.circle);
-            isOpenIzmir = false;
-          }
-          openPopup({
-            circle: narlidere.circle,
-            popup: popupNarlidere,
-            coords: [27.0, 38.4],
-            otherPopup: popupIzmir,
-            otherCircleRefSetter: () => revert(izmir.circle),
-          });
-          isOpenNarlidere = true;
+          setOpen("narlidere");
         });
       })
       .catch((err) => {
@@ -411,43 +451,100 @@ const DashBoard = () => {
           .setPopup(fallbackPopupNarlidere)
           .addTo(mapInstance);
 
+        izmirMarkerRef.current = izmirMarker;
+        narlidereMarkerRef.current = narlidereMarker;
+
         izmir.wrapper.addEventListener("click", (e) => {
           e.stopPropagation();
-          izmir.circle.style.width = "40px";
-          izmir.circle.style.height = "40px";
-          izmir.circle.style.borderRadius = "6px";
-          fallbackPopupIzmir.setLngLat([27.138, 38.4192]).addTo(mapInstance);
-          mapInstance.once("click", () => {
-            izmir.circle.style.width = "14px";
-            izmir.circle.style.height = "14px";
-            izmir.circle.style.borderRadius = "50%";
-            fallbackPopupIzmir.remove();
-          });
+          if (openRef.current === "izmir") {
+            setOpen(null);
+            return;
+          }
+          setOpen("izmir");
         });
 
         narlidere.wrapper.addEventListener("click", (e) => {
           e.stopPropagation();
-          narlidere.circle.style.width = "40px";
-          narlidere.circle.style.height = "40px";
-          narlidere.circle.style.borderRadius = "6px";
-          fallbackPopupNarlidere.setLngLat([27.0, 38.4]).addTo(mapInstance);
-          mapInstance.once("click", () => {
-            narlidere.circle.style.width = "14px";
-            narlidere.circle.style.height = "14px";
-            narlidere.circle.style.borderRadius = "50%";
-            fallbackPopupNarlidere.remove();
-          });
+          if (openRef.current === "narlidere") {
+            setOpen(null);
+            return;
+          }
+          setOpen("narlidere");
         });
       });
 
+    // cleanup for this effect
     return () => {
-      if (izmirMarker) izmirMarker.remove();
-      if (narlidereMarker) narlidereMarker.remove();
-      if (popupIzmir) popupIzmir.remove();
-      if (popupNarlidere) popupNarlidere.remove();
-      if (pdfBlobUrl) URL.revokeObjectURL(pdfBlobUrl);
+      if (izmirMarkerRef.current) izmirMarkerRef.current.remove();
+      if (narlidereMarkerRef.current) narlidereMarkerRef.current.remove();
+      if (popupIzmirRef.current) popupIzmirRef.current.remove();
+      if (popupNarlidereRef.current) popupNarlidereRef.current.remove();
+      if (pdfBlobUrlRef.current) URL.revokeObjectURL(pdfBlobUrlRef.current);
     };
-  }, [mapInstance]);
+  }, [mapInstance]); // run when mapInstance available
+
+  // effect: respond to openMarker state changes (open / close appropriate popup and toggle marker class)
+  useEffect(() => {
+    if (!mapInstance) return;
+
+    const izCircle = izmirCircleRef.current;
+    const narCircle = narlidereCircleRef.current;
+    const pIz = popupIzmirRef.current;
+    const pNar = popupNarlidereRef.current;
+
+    // helper to close both
+    const closeBoth = () => {
+      pIz?.remove();
+      pNar?.remove();
+      if (izCircle) izCircle.classList.remove("open");
+      if (narCircle) narCircle.classList.remove("open");
+    };
+
+    if (openMarker === "izmir") {
+      // close other
+      pNar?.remove();
+      if (narCircle) narCircle.classList.remove("open");
+
+      // open izmir
+      if (pIz) {
+        pIz.setLngLat([27.138, 38.4192]).addTo(mapInstance);
+        // ensure popup close button will update state
+        const popEl = pIz.getElement();
+        if (popEl) {
+          const closeBtn = popEl.querySelector(".maplibregl-popup-close-button");
+          if (closeBtn) closeBtn.addEventListener("click", () => setOpen(null), { once: true });
+        }
+      }
+      if (izCircle) izCircle.classList.add("open");
+
+      // close on next map click
+      mapInstance.once("click", () => setOpen(null));
+      return;
+    }
+
+    if (openMarker === "narlidere") {
+      // close other
+      pIz?.remove();
+      if (izCircle) izCircle.classList.remove("open");
+
+      // open narlidere
+      if (pNar) {
+        pNar.setLngLat([27.0, 38.4]).addTo(mapInstance);
+        const popEl = pNar.getElement();
+        if (popEl) {
+          const closeBtn = popEl.querySelector(".maplibregl-popup-close-button");
+          if (closeBtn) closeBtn.addEventListener("click", () => setOpen(null), { once: true });
+        }
+      }
+      if (narCircle) narCircle.classList.add("open");
+
+      mapInstance.once("click", () => setOpen(null));
+      return;
+    }
+
+    // openMarker === null => close everything
+    closeBoth();
+  }, [openMarker, mapInstance]);
 
   return (
     <main className="bg-transparent">
